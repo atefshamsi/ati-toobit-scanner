@@ -225,8 +225,14 @@ function makeCandidate(contract, price, frames, capital, leverage = 10) {
     const nearMean = Math.abs(price - m5.e21) / price < 0.003;
     const confirmedLongReversal = atLongSupport && m5.bullishRejection && m5.macdUp;
     const confirmedShortReversal = atShortResistance && m5.bearishRejection && m5.macdDown;
-    // Hard entry-quality gate: indicator score cannot override poor location or absent confirmation.
+    const confirmedBreakout = (side === 'LONG' && breakoutLong) || (side === 'SHORT' && breakoutShort);
+    const confirmedReversal = (side === 'LONG' && confirmedLongReversal) || (side === 'SHORT' && confirmedShortReversal);
+    // Avoid chasing an extended move: distance from EMA21 is measured in ATR units.
+    const extensionAtr = atrVal > 0 ? Math.abs(price - m5.e21) / atrVal : 0;
+    const lateEntry = extensionAtr >= 1.8 && !confirmedBreakout && !confirmedReversal;
+    // Hard entry-quality gates: indicator alignment alone is not an entry signal.
     if (inRangeMiddle && !breakoutLong && !breakoutShort) continue;
+    if (lateEntry) continue;
     if (atResistance && !breakoutLong) continue;
     if (atSupport && !breakoutShort) continue;
     if (side === 'LONG' && atLongSupport && !confirmedLongReversal && !breakoutLong) continue;
@@ -235,8 +241,9 @@ function makeCandidate(contract, price, frames, capital, leverage = 10) {
     if (side === 'SHORT' && nearSupport && !breakoutShort) continue;
     if (pumpFlag && side === 'SHORT' && !confirmedShortReversal && !breakoutShort) continue;
     if (pumpFlag && side === 'LONG' && !breakoutLong && !confirmedLongReversal) continue;
-    const entryQuality = (breakoutLong && side === 'LONG') || (breakoutShort && side === 'SHORT') || (confirmedLongReversal && side === 'LONG') || (confirmedShortReversal && side === 'SHORT');
-    const score = Math.max(0, Math.min(100, Math.round(indicatorScore * 0.72 + (entryQuality ? 18 : 0) + (nearMean ? 4 : 0))));
+    const entryQuality = confirmedBreakout || confirmedReversal;
+    if (!entryQuality) continue;
+    const score = Math.max(0, Math.min(100, Math.round(indicatorScore * 0.72 + 18 + (nearMean ? 4 : 0))));
     let orderType = 'Market';
     let entry = price;
     if (nearResistance || nearSupport) {
